@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AR sem marcador - Vídeo Fixo no Espaço</title>
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.2/aframe/build/aframe-ar.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      #videoCanvas {
+        display: none;
+      }
+
+      #statusDiv {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+
+  <body style="margin: 0px; overflow: hidden">
+    <div id="statusDiv">
+      <div>Status: <span id="connectionStatus">Conectando...</span></div>
+    </div>
+
+    <!-- Canvas usado como textura de vídeo -->
+    <canvas id="videoCanvas" width="640" height="480"></canvas>
+
+    <!-- A-SCENE COM ARJS -->
+    <a-scene
+      embedded
+      arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: false;"
+      renderer="colorManagement: true; antialias: true;"
+      vr-mode-ui="enabled: false"
+    >
+      <!-- Canvas usado como textura para a entidade 3D -->
+      <a-assets>
+        <canvas id="videoTexture" width="640" height="480"></canvas>
+      </a-assets>
+
+      <!-- PAINEL DE VÍDEO POSICIONADO NO ESPAÇO AR -->
+      <a-entity id="videoAnchor">
+        <!-- Posição e tamanho do vídeo: ALTERA AQUI -->
+        <a-plane
+          id="videoScreen"
+          position="1 0.5 -8"
+          width="2"
+          height="1.5"
+          rotation="0 0 0"
+          material="src: #videoTexture; side: double;"
+        ></a-plane>
+      </a-entity>
+
+      <!-- CÂMARA AR -->
+      <a-camera
+        id="arCamera"
+        look-controls="enabled: true"
+        wasd-controls="enabled: false"
+        position="0 1.6 0"
+      ></a-camera>
+    </a-scene>
+
+    <script>
+      // Setup de componentes HTML
+      const videoCanvas = document.getElementById("videoCanvas");
+      const videoTexture = document.getElementById("videoTexture");
+      const videoScreen = document.getElementById("videoScreen");
+      const statusElement = document.getElementById("connectionStatus");
+
+      const ctx = videoCanvas.getContext("2d");
+      const textureCtx = videoTexture.getContext("2d");
+
+      const socket = io();
+
+      // Atualiza o estado da conexão
+      socket.on("connect", () => {
+        statusElement.textContent = "Conectado";
+        statusElement.style.color = "lightgreen";
+      });
+
+      socket.on("disconnect", () => {
+        statusElement.textContent = "Desconectado";
+        statusElement.style.color = "red";
+      });
+
+      // Recebe os frames do servidor via socket
+      socket.on("video-frame", (frameData) => {
+        if (frameData?.data) {
+          const img = new Image();
+          img.onload = () => {
+            // Copia o frame recebido para a textura
+            textureCtx.clearRect(0, 0, videoTexture.width, videoTexture.height);
+            textureCtx.drawImage(
+              img,
+              0,
+              0,
+              videoTexture.width,
+              videoTexture.height
+            );
+
+            // Atualiza a textura da entidade 3D
+            const mat = videoScreen.components.material;
+            if (mat?.material?.map) {
+              mat.material.map.needsUpdate = true;
+            }
+          };
+          img.src = frameData.data;
+        }
+      });
+    </script>
+  </body>
+</html>

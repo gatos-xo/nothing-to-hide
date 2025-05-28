@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Câmara do PC - Sender</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      /* teu CSS aqui - mantive o original */
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f0f0f0;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      video {
+        width: 100%;
+        max-width: 640px;
+        height: auto;
+        border: 2px solid #ccc;
+        border-radius: 5px;
+      }
+      .controls {
+        margin: 20px 0;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .start {
+        background: #4caf50;
+        color: white;
+      }
+      .stop {
+        background: #f44336;
+        color: white;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .connected {
+        background: #d4edda;
+        color: #155724;
+      }
+      .disconnected {
+        background: #f8d7da;
+        color: #721c24;
+      }
+      .streaming {
+        background: #cce7ff;
+        color: #004085;
+      }
+      canvas {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎥 Câmara do PC - Streaming para AR</h1>
+
+      <div id="status" class="status disconnected">Status: Desconectado</div>
+
+      <video id="video" autoplay muted playsinline></video>
+
+      <div class="controls">
+        <button id="startBtn" class="start">Iniciar Câmara</button>
+        <button id="stopBtn" class="stop" disabled>Parar Câmara</button>
+      </div>
+
+      <div>
+        <p><strong>Instruções:</strong></p>
+        <ol>
+          <li>Clica em "Iniciar Câmara" para ativar a webcam</li>
+          <li>
+            No telemóvel, acede a: <code id="mobileUrl">A carregar IP...</code>
+          </li>
+          <li>Aponta o telemóvel para o marcador AR</li>
+          <li>O cubo deve mostrar esta câmara!</li>
+        </ol>
+      </div>
+
+      <div>
+        <p><strong>Stats:</strong></p>
+        <p>Frames enviados: <span id="frameCount">0</span></p>
+        <p>Clientes conectados: <span id="clientCount">0</span></p>
+      </div>
+    </div>
+
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <script>
+      // Elementos DOM
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const statusDiv = document.getElementById("status");
+      const frameCountSpan = document.getElementById("frameCount");
+      const clientCountSpan = document.getElementById("clientCount");
+      const mobileUrlSpan = document.getElementById("mobileUrl");
+
+      let stream = null;
+      let socket = null;
+      let isStreaming = false;
+      let frameCount = 0;
+      let animationId = null;
+
+      // Buscar IP real do servidor e mostrar no UI
+      fetch("/api/ip")
+        .then((res) => res.json())
+        .then(({ ip }) => {
+          mobileUrlSpan.textContent = `https://${ip}:${window.location.port}`;
+        })
+        .catch(() => {
+          mobileUrlSpan.textContent = `https://${window.location.hostname}:${window.location.port}`;
+        });
+
+      // Conectar ao WebSocket
+      function connectSocket() {
+        socket = io();
+
+        socket.on("connect", () => {
+          updateStatus("Conectado", "connected");
+          console.log("Conectado ao servidor");
+        });
+
+        socket.on("disconnect", () => {
+          updateStatus("Desconectado", "disconnected");
+          console.log("Desconectado do servidor");
+        });
+
+        // Atualizar contagem de clientes (se quiseres, tens que emitir do server)
+        socket.on("client-count", (count) => {
+          clientCountSpan.textContent = count;
+        });
+      }
+
+      // Atualizar status visual
+      function updateStatus(text, className) {
+        statusDiv.textContent = `Status: ${text}`;
+        statusDiv.className = `status ${className}`;
+      }
+
+      // Iniciar câmara
+      async function startCamera() {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 15 },
+            },
+            audio: false,
+          });
+
+          video.srcObject = stream;
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+
+          video.addEventListener("loadedmetadata", () => {
+            startStreaming();
+          });
+        } catch (error) {
+          console.error("Erro ao aceder à câmara:", error);
+          alert("Erro ao aceder à câmara. Verifica as permissões!");
+        }
+      }
+
+      // Parar câmara
+      function stopCamera() {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+
+        isStreaming = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        updateStatus("Conectado", "connected");
+      }
+
+      // Começar streaming
+      function startStreaming() {
+        if (!socket || !socket.connected) {
+          console.error("Socket não conectado");
+          return;
+        }
+
+        isStreaming = true;
+        updateStatus("Streaming Ativo", "streaming");
+        sendFrame();
+      }
+
+      // Enviar frame
+      function sendFrame() {
+        if (!isStreaming || !video.videoWidth || !video.videoHeight) {
+          animationId = requestAnimationFrame(sendFrame);
+          return;
+        }
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const dataURL = canvas.toDataURL("image/jpeg", 0.7);
+
+        if (socket && socket.connected) {
+          socket.emit("camera-frame", {
+            data: dataURL,
+            timestamp: Date.now(),
+          });
+
+          frameCount++;
+          frameCountSpan.textContent = frameCount;
+        }
+
+        setTimeout(() => {
+          animationId = requestAnimationFrame(sendFrame);
+        }, 1000 / 15);
+      }
+
+      startBtn.addEventListener("click", startCamera);
+      stopBtn.addEventListener("click", stopCamera);
+
+      window.addEventListener("load", () => {
+        connectSocket();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        stopCamera();
+        if (socket) {
+          socket.disconnect();
+        }
+      });
+    </script>
+  </body>
+</html>
