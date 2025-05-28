@@ -1,19 +1,13 @@
-const fs = require("fs");
-const https = require("https");
 const express = require("express");
 const socketIo = require("socket.io");
 const path = require("path");
 const os = require("os");
+const http = require("http");
 require("dotenv").config();
 
 const app = express();
+const server = http.createServer(app); // HTTP em vez de HTTPS
 
-const options = {
-  key: fs.readFileSync(path.join(__dirname, "key.pem")),
-  cert: fs.readFileSync(path.join(__dirname, "cert.pem")),
-};
-
-const server = https.createServer(options, app);
 const io = socketIo(server, {
   cors: {
     origin: "*",
@@ -29,7 +23,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Endpoint para retornar IP local do servidor
+// Endpoint para retornar IP local do servidor (opcional)
 app.get("/api/ip", (req, res) => {
   const interfaces = os.networkInterfaces();
   let address = "IP não encontrado";
@@ -73,22 +67,6 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-// Função para obter IP local
-function getLocalIp() {
-  const interfaces = os.networkInterfaces();
-  for (const iface of Object.values(interfaces)) {
-    for (const alias of iface) {
-      if (alias.family === "IPv4" && !alias.internal) {
-        return alias.address;
-      }
-    }
-  }
-  return "IP não encontrado";
-}
-
-server.listen(PORT, "0.0.0.0", () => {
-  const localIp = getLocalIp();
-  console.log(`Servidor HTTPS a correr na porta ${PORT}`);
-  console.log(`Acede com o teu pc a: https://localhost:${PORT}/camera.html`);
-  console.log(`E no telemóvel entra no site: https://${localIp}:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Servidor a correr na porta ${PORT}`);
 });
