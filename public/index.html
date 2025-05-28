@@ -31,7 +31,7 @@
     </div>
 
     <!-- Música de fundo -->
-    <audio id="bgMusic" autoplay loop hidden>
+    <audio id="bgMusic" loop hidden>
       <source src="static/SurveillanceFinal.mp3" type="audio/mp3" />
       O teu navegador não suporta áudio HTML5.
     </audio>
@@ -135,14 +135,38 @@
         }
       });
 
-      // Ativar música no primeiro clique (necessário em alguns browsers)
-      window.addEventListener("click", () => {
+      // Tocar música quando o utilizador se mover
+      document.addEventListener("DOMContentLoaded", () => {
         const audio = document.getElementById("bgMusic");
-        if (audio && audio.paused) {
-          audio.play().catch((err) => {
-            console.warn("Erro ao tocar música:", err);
-          });
+        const camera = document.getElementById("arCamera");
+
+        let started = false;
+        let lastRotation = null;
+
+        function checkCameraRotation() {
+          if (started) return;
+
+          const rot = camera.object3D.rotation;
+          if (!lastRotation) {
+            lastRotation = { x: rot.x, y: rot.y, z: rot.z };
+            return;
+          }
+
+          const deltaY = Math.abs(rot.y - lastRotation.y);
+          const deltaX = Math.abs(rot.x - lastRotation.x);
+          const deltaZ = Math.abs(rot.z - lastRotation.z);
+
+          if (deltaY > 0.05 || deltaX > 0.05 || deltaZ > 0.05) {
+            audio
+              .play()
+              .catch((err) => console.warn("Erro ao iniciar música:", err));
+            started = true;
+          }
+
+          lastRotation = { x: rot.x, y: rot.y, z: rot.z };
         }
+
+        setInterval(checkCameraRotation, 250); // a cada 250ms
       });
     </script>
   </body>
