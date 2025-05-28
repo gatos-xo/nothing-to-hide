@@ -131,7 +131,7 @@
 
       // Conectar ao WebSocket
       function connectSocket() {
-        socket = io();
+        socket = io("https://a-frame-eye-test.onrender.com");
 
         socket.on("connect", () => {
           updateStatus("Conectado", "connected");
