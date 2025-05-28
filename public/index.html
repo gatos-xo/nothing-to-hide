@@ -77,7 +77,8 @@
       const ctx = videoCanvas.getContext("2d");
       const textureCtx = videoTexture.getContext("2d");
 
-      const socket = io("https://a-frame-eye-test.onrender.com");
+      const socket = io();
+      // "https://a-frame-eye-test.onrender.com"
 
       // Atualiza o estado da conexão
       socket.on("connect", () => {
