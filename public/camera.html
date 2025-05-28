@@ -120,14 +120,8 @@
       let animationId = null;
 
       // Buscar IP real do servidor e mostrar no UI
-      fetch("/api/ip")
-        .then((res) => res.json())
-        .then(({ ip }) => {
-          mobileUrlSpan.textContent = `https://${ip}:${window.location.port}`;
-        })
-        .catch(() => {
-          mobileUrlSpan.textContent = `https://${window.location.hostname}:${window.location.port}`;
-        });
+      const renderUrl = "https://a-frame-eye-test.onrender.com";
+      mobileUrlSpan.textContent = renderUrl;
 
       // Conectar ao WebSocket
       function connectSocket() {
